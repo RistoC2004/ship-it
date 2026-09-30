@@ -1,0 +1,221 @@
+import { defineIncidents } from "../define";
+
+export const PRODUCTION_INCIDENTS = defineIncidents([
+  {
+    id: "pr-ai-regression",
+    stage: "production",
+    title: "The hotfix worked, and broke sign-in",
+    summary:
+      "A one-line AI-generated fix for a reminder timezone bug shipped 20 minutes ago. Reminders are right now. Users are also being signed out.",
+    severity: "sev1",
+    category: "AI-assisted code",
+    concept: "regression",
+    tags: ["ai"],
+    log: "Prod: sign-outs spiking after hotfix 2.4.1",
+    evidence: {
+      kind: "diff",
+      title: "hotfix 2.4.1 · lib/date.ts",
+      lines: [
+        "  // used by reminders AND session expiry",
+        "  export function parseDate(value: string) {",
+        "-   return new Date(value);",
+        "+   return new Date(value + \"Z\");",
+        "  }",
+        "",
+        "  expires_at \"2026-10-01T02:00:00Z\"",
+        "  → parsed as Invalid Date",
+      ],
+    },
+    choices: [
+      {
+        id: "revert",
+        label: "Revert the hotfix, then fix reminders locally",
+        minutes: 10,
+        grade: "strong",
+        effects: { stability: 10, confidence: 10, userImpact: 2 },
+        practice: "rollback-first",
+        feedback:
+          "The revert restores sign-in within minutes. parseDate is shared, and appending Z to timestamps that already end in one made session expiry an Invalid Date. The real fix goes into reminders, with tests for both callers.",
+        log: "Reverted 2.4.1 · sign-in recovered",
+      },
+      {
+        id: "ai-patch",
+        label: "Ask the AI for another fix on top",
+        minutes: 5,
+        grade: "risky",
+        effects: { stability: -10, confidence: -8, userImpact: 10 },
+        feedback:
+          "The second patch handles the double Z but not offsets like +02:00. Stacking patches during a live incident makes the eventual revert harder.",
+        log: "Hotfix 2.4.2 (AI) · sign-outs continue",
+      },
+      {
+        id: "fix-forward",
+        label: "Audit every caller of parseDate and fix forward",
+        minutes: 26,
+        grade: "costly",
+        effects: { stability: 4, confidence: 8, userImpact: 12 },
+        feedback:
+          "Thorough and correct, and sign-in stays broken for all 26 minutes. Revert first, then fix it properly.",
+        log: "parseDate callers fixed · 2.4.2 shipped",
+      },
+      {
+        id: "wait",
+        label: "Post a status update and wait for more reports",
+        minutes: 2,
+        grade: "risky",
+        effects: { stability: -12, confidence: -6, userImpact: 20 },
+        feedback: "The reports keep coming, and so do the sign-outs. The evidence was already on the dashboard.",
+        log: "Status page updated",
+      },
+    ],
+    related: {
+      project: "QueryLift",
+      anchor: "querylift",
+      note: "QueryLift records a change history and can roll back the changes it applies.",
+    },
+  },
+  {
+    id: "pr-daily-turn",
+    stage: "production",
+    title: "Two members both got today's turn",
+    summary:
+      "In a group app, only one member should take the daily turn. This morning, two members of the same group were both credited with it.",
+    severity: "sev2",
+    category: "Concurrency",
+    concept: "concurrency",
+    tags: [],
+    log: "Prod: duplicate daily turns in 3 groups",
+    evidence: {
+      kind: "log",
+      title: "prod · api",
+      lines: [
+        "10:00:00.412  user_a  POST /turns/today  201",
+        "10:00:00.418  user_b  POST /turns/today  201",
+        "",
+        "// handler",
+        "if (!(await hasTurnToday(groupId)))",
+        "  await createTurn(groupId, userId);",
+      ],
+    },
+    choices: [
+      {
+        id: "unique-constraint",
+        label: "Enforce it in the database: unique (group_id, day)",
+        minutes: 15,
+        grade: "strong",
+        effects: { stability: 10, confidence: 12 },
+        practice: "db-invariants",
+        feedback:
+          "Check-then-insert leaves a 6 ms window where both requests see no turn yet. A unique constraint makes the database the referee: one insert wins, and the other gets a clear conflict.",
+        log: "UNIQUE (group_id, day) · second request gets 409",
+      },
+      {
+        id: "client-check",
+        label: "Check for an existing turn on the client first",
+        minutes: 5,
+        grade: "risky",
+        effects: { stability: -2, confidence: -8, userImpact: 4 },
+        addsRisk: "turn-race",
+        feedback: "The client can't see what another client is doing. The race moves; it doesn't go away.",
+        log: "Client-side turn check added",
+      },
+      {
+        id: "random-delay",
+        label: "Add a small random delay before creating a turn",
+        minutes: 3,
+        grade: "risky",
+        effects: { stability: -4, confidence: -10, userImpact: 4 },
+        addsRisk: "turn-race",
+        feedback: "It makes the race rarer and much harder to reproduce, which is the worst kind of fix.",
+        log: "Jitter added before createTurn",
+      },
+      {
+        id: "serializable",
+        label: "Run the check and insert in a serializable transaction",
+        minutes: 18,
+        grade: "reasonable",
+        effects: { stability: 8, confidence: 8 },
+        feedback:
+          "Correct: the database aborts one of the two. You also need retry handling for the aborted transaction, which is more moving parts than a constraint.",
+        log: "Serializable transaction around turns",
+      },
+    ],
+    related: {
+      project: "One Day",
+      anchor: "one-day",
+      note: "One Day enforces its daily-turn and fairness rules on the server.",
+    },
+  },
+  {
+    id: "pr-error-spike",
+    stage: "production",
+    title: "Server errors spike after full rollout",
+    summary:
+      "Five minutes after going to 100%, server errors climbed from 0.1% to 4.2%, almost all of them on /api/sync.",
+    severity: "sev1",
+    category: "Reliability",
+    concept: "rollback",
+    tags: [],
+    log: "Prod: 5xx rate 0.1% → 4.2% on /api/sync",
+    evidence: {
+      kind: "metrics",
+      title: "prod · error rate",
+      lines: [
+        "5xx   0.1%  ▁▁▁▁▂▅▇█  4.2%",
+        "      rollout to 100% → spike 2 min later",
+        "",
+        "top error   ECONNRESET upstream sync-worker",
+        "            pool exhausted (20/20)",
+      ],
+    },
+    choices: [
+      {
+        id: "rollback",
+        label: "Roll back to v2.3.2 now; investigate after",
+        minutes: 5,
+        grade: "strong",
+        effects: { stability: 12, confidence: 8, userImpact: 2 },
+        practice: "rollback-first",
+        feedback:
+          "The spike lines up with the deploy. Rolling back first turns this into a seven-minute blip instead of an evening outage, and pool exhaustion is easier to debug with no customers waiting.",
+        log: "Rolled back to v2.3.2 · 5xx back to 0.1%",
+      },
+      {
+        id: "restart",
+        label: "Restart the app servers",
+        minutes: 3,
+        grade: "costly",
+        effects: { stability: -6, confidence: -4, userImpact: 10 },
+        feedback:
+          "Errors drop, then climb again as the fresh servers fill their pools. Restarts treat symptoms.",
+        log: "Servers restarted · errors returning",
+      },
+      {
+        id: "raise-pool",
+        label: "Raise the connection pool limit",
+        minutes: 6,
+        grade: "costly",
+        effects: { stability: 2, confidence: -4, userImpact: 6 },
+        addsRisk: "pool-leak",
+        feedback:
+          "The spike eases, and the database now takes three times the connections. You moved the bottleneck without finding the leak.",
+        log: "Pool limit raised 20 → 60",
+      },
+      {
+        id: "investigate-live",
+        label: "Dig through the logs while it runs",
+        minutes: 22,
+        grade: "costly",
+        effects: { stability: -4, confidence: 6, userImpact: 16 },
+        feedback:
+          "You find the leak 22 minutes later, while one request in 25 was failing. Roll back first, then investigate.",
+        log: "Leak found in sync-worker after 22 min",
+      },
+    ],
+    related: {
+      project: "QueryLift",
+      anchor: "querylift",
+      note: "QueryLift puts a reliability layer in front of its Shopify GraphQL calls.",
+    },
+  },
+]);

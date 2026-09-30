@@ -1,0 +1,225 @@
+import { defineIncidents } from "../define";
+
+export const STAGING_INCIDENTS = defineIncidents([
+  {
+    id: "st-cookie-401",
+    stage: "staging",
+    title: "Works locally. 401 in staging.",
+    summary:
+      "Every request to the new reports API returns 401 in staging. It works on every developer's machine.",
+    severity: "sev2",
+    category: "Authentication",
+    concept: "session-config",
+    tags: [],
+    log: "Staging: /api/reports returns 401",
+    evidence: {
+      kind: "log",
+      title: "staging · api",
+      lines: [
+        "14:02:11  GET /api/reports  401  3 ms",
+        "14:02:11  auth: no session cookie",
+        "",
+        "origin  app.staging.example.com",
+        "api     api.staging.example.com",
+        "cookie  Domain=localhost; SameSite=Lax",
+      ],
+    },
+    choices: [
+      {
+        id: "read-logs",
+        label: "Compare the auth logs with the request headers",
+        minutes: 12,
+        grade: "strong",
+        effects: { stability: 8, confidence: 12 },
+        practice: "evidence",
+        feedback:
+          "The session cookie is scoped to localhost and the API lives on another subdomain, so the browser never sends it. It's a config fix, not a code change.",
+        log: "Cookie domain fixed in staging config",
+      },
+      {
+        id: "disable-auth",
+        label: "Disable auth on the reports endpoint for now",
+        minutes: 3,
+        grade: "risky",
+        effects: { stability: 2, confidence: -12 },
+        addsRisk: "open-reports",
+        feedback:
+          "Staging goes green. So will anyone's access to the reports once this config reaches production.",
+        log: "Auth bypassed on /api/reports",
+      },
+      {
+        id: "ai-triage",
+        label: "Ask an AI for likely causes, then check them against the logs",
+        minutes: 9,
+        grade: "strong",
+        effects: { stability: 8, confidence: 10 },
+        practice: "ai-triage",
+        feedback:
+          "The assistant suggests cookie scope, CORS credentials and token audience, and the logs confirm the first. A quick way to narrow the search, with the logs making the final call.",
+        log: "AI triage → cookie scope confirmed in logs",
+      },
+      {
+        id: "regenerate-keys",
+        label: "Regenerate the API keys and redeploy",
+        minutes: 15,
+        grade: "costly",
+        effects: { stability: -2, confidence: -4 },
+        feedback:
+          "Still 401. The keys were fine; the browser never sent the session. Guessing costs a full deploy cycle.",
+        log: "Keys regenerated · still 401",
+      },
+    ],
+    related: {
+      project: "Petfolio",
+      anchor: "petfolio",
+      note: "In Petfolio, my work focused on the frontend and authenticated REST API integration.",
+    },
+  },
+  {
+    id: "st-storage-403",
+    stage: "staging",
+    title: "Photo uploads fail only in staging",
+    summary:
+      "Profile photo uploads work locally, but the storage bucket rejects every one of them in staging.",
+    severity: "sev2",
+    category: "Storage security",
+    concept: "storage-access",
+    tags: [],
+    log: "Staging: avatar upload → 403",
+    evidence: {
+      kind: "log",
+      title: "staging · storage",
+      lines: [
+        "PUT /storage/avatars/u_81f2/photo.jpg",
+        "← 403  row-level security violation",
+        "  policy  first folder = auth.uid()",
+        "  folder  u_81f2",
+        "  uid     81f2c9e0-5b7a-4d1e-9c3f-…",
+      ],
+    },
+    choices: [
+      {
+        id: "public-bucket",
+        label: "Make the bucket public so uploads work",
+        minutes: 2,
+        grade: "risky",
+        effects: { stability: 2, confidence: -12 },
+        addsRisk: "public-files",
+        feedback: "Uploads work. So does reading every user's photo by guessing a URL.",
+        log: "avatars bucket set to public",
+      },
+      {
+        id: "service-key",
+        label: "Upload with the service-role key from the app",
+        minutes: 4,
+        grade: "risky",
+        effects: { stability: 2, confidence: -14 },
+        addsRisk: "service-key",
+        feedback:
+          "It works because the app now carries a key that bypasses every policy in the database. Anyone who unpacks the app has it too.",
+        log: "Client uploading with service-role key",
+      },
+      {
+        id: "fix-path",
+        label: "Fix the upload path to match the policy and test as a real user",
+        minutes: 14,
+        grade: "strong",
+        effects: { stability: 8, confidence: 12 },
+        practice: "least-privilege",
+        feedback:
+          "The policy expects the first folder to be the user's id, and the client wrote a shortened u_81f2 instead. A permissive local policy hid it. Storage stays private.",
+        log: "Upload path = auth.uid() · tested as a real user",
+      },
+      {
+        id: "loosen-policy",
+        label: "Allow any signed-in user to write to the bucket",
+        minutes: 5,
+        grade: "risky",
+        effects: { stability: 2, confidence: -8 },
+        addsRisk: "shared-write",
+        feedback: "Uploads pass, and any signed-in user can now overwrite anyone else's photo.",
+        log: "Storage policy loosened to any authenticated user",
+      },
+    ],
+    related: {
+      project: "One Day",
+      anchor: "one-day",
+      note: "One Day keeps each group's shared media in private storage.",
+    },
+  },
+  {
+    id: "st-ai-output",
+    stage: "staging",
+    title: "The AI feature returns broken data",
+    summary:
+      "Recipe suggestions crash about 1 request in 30 in staging. The model sometimes returns JSON with missing fields.",
+    severity: "sev2",
+    category: "AI features",
+    concept: "ai-output",
+    tags: ["ai"],
+    log: "Staging: RecipeCard crashes on null steps",
+    evidence: {
+      kind: "log",
+      title: "staging · client errors",
+      lines: [
+        "TypeError: Cannot read properties of null",
+        "  (reading 'map') at RecipeCard.tsx:18",
+        "",
+        "POST /api/suggest → 200",
+        "  { \"title\": \"Lemon pasta\", \"steps\": null }",
+        "",
+        "affected: 3.2% of requests",
+      ],
+    },
+    choices: [
+      {
+        id: "validate",
+        label: "Validate model output on the server; retry, then fall back",
+        minutes: 18,
+        grade: "strong",
+        effects: { stability: 8, confidence: 12 },
+        practice: "validate",
+        feedback:
+          "Model output is untrusted input. A schema check rejects bad responses, retries once, and returns a clear fallback, so clients only ever see valid data.",
+        log: "Schema validation on /api/suggest",
+      },
+      {
+        id: "optional-chaining",
+        label: "Add optional chaining in the component",
+        minutes: 4,
+        grade: "costly",
+        effects: { stability: 2, confidence: -6 },
+        addsRisk: "unvalidated-ai",
+        feedback:
+          "The crash stops, and users get recipes with no steps. The bad data still flows, just quietly now.",
+        log: "steps?.map() in RecipeCard",
+      },
+      {
+        id: "better-prompt",
+        label: "Tighten the prompt so the model always returns valid JSON",
+        minutes: 10,
+        grade: "costly",
+        effects: { stability: 2, confidence: -2 },
+        addsRisk: "unvalidated-ai",
+        feedback:
+          "Better prompts lower the failure rate; they don't make it zero. Without validation, 1 in 30 becomes 1 in 300 and much harder to catch.",
+        log: "Prompt updated with stricter JSON rules",
+      },
+      {
+        id: "error-boundary",
+        label: "Wrap the recipe card in an error boundary",
+        minutes: 6,
+        grade: "reasonable",
+        effects: { stability: 4, confidence: 2 },
+        feedback:
+          "Users get a friendly fallback instead of a blank screen, which is a good safety net. The API still accepts malformed data, though.",
+        log: "Error boundary around RecipeCard",
+      },
+    ],
+    related: {
+      project: "MealSaver",
+      anchor: "mealsaver",
+      note: "MealSaver validates AI output on the server before the app ever sees it.",
+    },
+  },
+]);

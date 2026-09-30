@@ -1,0 +1,198 @@
+import type { GameContent, GameRules, Incident } from "../../src/features/ship-it/engine";
+
+/**
+ * A tiny three-stage library with hand-picked numbers, so engine tests assert
+ * exact behaviour without depending on how the real content is tuned.
+ */
+export const FIXTURE_RULES: GameRules = {
+  windowMinutes: 60,
+  clockStart: 9 * 60,
+  initialMetrics: { stability: 50, userImpact: 10, confidence: 50 },
+  followUpDelay: 2,
+  requiredTags: ["ai"],
+  scoring: {
+    weights: { stability: 4, confidence: 3.5, userImpact: 2.5 },
+    riskPenalty: { medium: 60, high: 120, critical: 200 },
+    overtimePenaltyPerMinute: 4,
+    overtimePenaltyCap: 200,
+  },
+};
+
+const incidents: Incident[] = [
+  {
+    id: "build",
+    stage: "ci",
+    title: "Build incident",
+    summary: "Stage one.",
+    severity: "sev2",
+    category: "Testing",
+    concept: "tests",
+    tags: ["ai"],
+    log: "build opened",
+    choices: [
+      {
+        id: "good",
+        label: "Do it properly",
+        minutes: 10,
+        grade: "strong",
+        effects: { stability: 10, confidence: 10 },
+        practice: "careful",
+        feedback: "Good.",
+        log: "did it properly",
+      },
+      {
+        id: "shortcut",
+        label: "Take the shortcut",
+        minutes: 2,
+        grade: "risky",
+        effects: { confidence: -10 },
+        addsRisk: "hole",
+        feedback: "Risky.",
+      },
+      {
+        id: "boost",
+        label: "Overshoot",
+        minutes: 30,
+        grade: "costly",
+        effects: { stability: 40, userImpact: -40, confidence: 40 },
+        feedback: "Clamped.",
+      },
+    ],
+  },
+  {
+    id: "review",
+    stage: "review",
+    title: "Review incident",
+    summary: "Stage two.",
+    severity: "sev3",
+    category: "Review",
+    concept: "review",
+    tags: [],
+    log: "review opened",
+    choices: [
+      {
+        id: "good",
+        label: "Review it",
+        minutes: 10,
+        grade: "strong",
+        effects: { stability: 5, confidence: 5 },
+        practice: "careful",
+        feedback: "Good.",
+      },
+      {
+        id: "patch-hole",
+        label: "Patch the earlier hole",
+        minutes: 5,
+        grade: "reasonable",
+        effects: {},
+        resolvesRisks: ["hole"],
+        feedback: "Patched.",
+      },
+      {
+        id: "minor",
+        label: "Leave a small risk",
+        minutes: 1,
+        grade: "risky",
+        effects: { confidence: -5 },
+        addsRisk: "minor",
+        feedback: "Minor.",
+      },
+    ],
+  },
+  {
+    id: "stage",
+    stage: "staging",
+    title: "Staging incident",
+    summary: "Stage three.",
+    severity: "sev1",
+    category: "Staging",
+    concept: "staging",
+    tags: [],
+    log: "staging opened",
+    choices: [
+      {
+        id: "good",
+        label: "Verify it",
+        minutes: 10,
+        grade: "strong",
+        effects: { stability: 5, confidence: 5 },
+        practice: "verify",
+        feedback: "Good.",
+      },
+      {
+        id: "minor",
+        label: "Leave the same small risk",
+        minutes: 1,
+        grade: "risky",
+        effects: {},
+        addsRisk: "minor",
+        feedback: "Minor again.",
+      },
+      {
+        id: "slow",
+        label: "Take forever",
+        minutes: 45,
+        grade: "costly",
+        effects: {},
+        feedback: "Slow.",
+      },
+    ],
+  },
+  {
+    id: "consequence",
+    stage: "follow-up",
+    title: "The shortcut came back",
+    summary: "Follow-up.",
+    severity: "sev1",
+    category: "Security",
+    concept: "consequence",
+    tags: [],
+    log: "consequence opened",
+    choices: [
+      {
+        id: "fix",
+        label: "Fix it properly",
+        minutes: 10,
+        grade: "strong",
+        effects: { userImpact: 10 },
+        resolvesRisks: ["hole"],
+        feedback: "Fixed.",
+      },
+      {
+        id: "ignore",
+        label: "Ignore it",
+        minutes: 1,
+        grade: "risky",
+        effects: { userImpact: 20 },
+        feedback: "Still open.",
+      },
+      {
+        id: "patch",
+        label: "Patch quietly",
+        minutes: 5,
+        grade: "reasonable",
+        effects: {},
+        resolvesRisks: ["hole"],
+        feedback: "Patched.",
+      },
+    ],
+  },
+];
+
+export const FIXTURE_CONTENT: GameContent = {
+  stages: [
+    { id: "ci", label: "Build", short: "Build" },
+    { id: "review", label: "Review", short: "Review" },
+    { id: "staging", label: "Staging", short: "Staging" },
+  ],
+  incidents,
+  risks: {
+    hole: { id: "hole", title: "A critical hole", severity: "critical", followUp: "consequence" },
+    minor: { id: "minor", title: "A minor gap", severity: "medium" },
+  },
+  practices: {
+    careful: { id: "careful", label: "Careful" },
+    verify: { id: "verify", label: "Verified" },
+  },
+  rules: FIXTURE_RULES,
+};
