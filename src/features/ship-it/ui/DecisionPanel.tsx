@@ -4,6 +4,7 @@ import type { Choice, Decision, GameContent, Incident } from "../engine/types";
 import { projectUrl } from "../site";
 import { GRADE_COPY, METRIC_LABELS } from "./copy";
 import { AlertIcon, ArrowIcon, CheckIcon } from "./icons";
+import { linkArrow, linkProps } from "./links";
 import styles from "./ship-it.module.css";
 import { cx, TONE_SURFACE, TONE_TEXT } from "./tones";
 
@@ -21,6 +22,7 @@ export function DecisionPanel({ incident, choice, decision, content, isLast, hea
   const grade = GRADE_COPY[choice.grade];
   const alternatives = incident.choices.filter((candidate) => candidate.id !== choice.id);
   const changes = METRIC_KEYS.filter((key) => decision.applied[key] !== 0);
+  const relatedHref = incident.related ? projectUrl(incident.related.anchor) : "";
 
   return (
     <section aria-labelledby="ship-it-verdict" className={cx("mt-6 scroll-mt-24", styles.enter)}>
@@ -74,16 +76,15 @@ export function DecisionPanel({ incident, choice, decision, content, isLast, hea
 
       {incident.related ? (
         <a
-          href={projectUrl(incident.related.anchor)}
-          target="_blank"
-          rel="noreferrer"
+          href={relatedHref}
+          {...linkProps(relatedHref)}
           className="group mt-3 flex items-start gap-3 rounded-2xl border border-white/10 px-4 py-3 text-sm leading-6 text-white/70 transition hover:border-white/20 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9fdcbf]"
         >
           <span className="mt-0.5 shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] text-[#9fdcbf]">In my work</span>
           <span className="min-w-0">
             {incident.related.note}{" "}
             <span className="whitespace-nowrap font-semibold text-white/90 group-hover:text-white">
-              See {incident.related.project} ↗
+              See {incident.related.project} {linkArrow(relatedHref)}
             </span>
           </span>
         </a>

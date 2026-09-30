@@ -5,9 +5,10 @@ import { metricBand, type Band, userImpactLabel } from "../engine/metrics";
 import type { GameState, RiskSeverity, RunResult } from "../engine/types";
 import { GRADE_COPY, OUTCOME_COPY, type Tone } from "./copy";
 import { shipIt } from "./engine";
+import { GITHUB_PROFILE_URL, PROJECTS_URL, SOURCE_URL } from "../site";
 import { AlertIcon, CheckIcon, LinkIcon, PlayIcon, RestartIcon } from "./icons";
+import { linkArrow, linkProps } from "./links";
 import styles from "./ship-it.module.css";
-import { GITHUB_PROFILE_URL, PORTFOLIO_URL } from "../site";
 import { cx, TONE_FILL, TONE_SURFACE, TONE_TEXT } from "./tones";
 import { useCountUp } from "./useCountUp";
 
@@ -212,12 +213,19 @@ export function ReleaseReport({ state, result, best, isNewBest, reducedMotion, h
         </div>
         <div className="mt-6 flex shrink-0 flex-col gap-3 sm:flex-row lg:mt-0">
           <a
-            href={`${PORTFOLIO_URL}#work`}
-            target="_blank"
-            rel="noreferrer"
+            href={PROJECTS_URL}
+            {...linkProps(PROJECTS_URL)}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-[#31594a] px-6 py-3.5 text-sm font-bold text-white transition hover:bg-[#244438] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#31594a]"
           >
-            View projects ↗
+            View projects {linkArrow(PROJECTS_URL)}
+          </a>
+          <a
+            href={SOURCE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-black/20 px-6 py-3.5 text-sm font-bold transition hover:border-black hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#31594a]"
+          >
+            See the code ↗
           </a>
           <a
             href={GITHUB_PROFILE_URL}
